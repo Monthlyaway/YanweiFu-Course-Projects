@@ -39,7 +39,12 @@ class Linear(Layer):
         input: [batch_size, in_dim]
         out: [batch_size, out_dim]
         """
-        pass
+        # Store input for backward pass
+        self.input = X
+        # Linear transformation: Y = X·W + b
+        # X: [batch_size, in_dim], W: [in_dim, out_dim], b: [1, out_dim]
+        output = np.dot(X, self.W) + self.b
+        return output
 
     def backward(self, grad : np.ndarray):
         """
@@ -47,7 +52,32 @@ class Linear(Layer):
         output: [batch_size, in_dim] the grad to be passed to the previous layer.
         This function also calculates the grads for W and b.
         """
-        pass
+        batch_size = self.input.shape[0]
+        
+        # Gradient with respect to W: dL/dW = X^T · dL/dY
+        # self.input: [batch_size, in_dim], grad: [batch_size, out_dim]
+        # dW: [in_dim, out_dim]
+        dW = np.dot(self.input.T, grad)
+        
+        # Gradient with respect to b: dL/db = sum(dL/dY, axis=0)
+        # Sum gradients across the batch dimension
+        # db: [1, out_dim]
+        db = np.sum(grad, axis=0, keepdims=True)
+        
+        # Gradient with respect to X: dL/dX = dL/dY · W^T
+        # grad: [batch_size, out_dim], W.T: [out_dim, in_dim]
+        # dX: [batch_size, in_dim]
+        dX = np.dot(grad, self.W.T)
+        
+        # Store gradients for optimizer
+        self.grads['W'] = dW
+        self.grads['b'] = db
+        
+        # Apply weight decay if enabled
+        if self.weight_decay:
+            self.grads['W'] += self.weight_decay_lambda * self.W
+        
+        return dX
     
     def clear_grad(self):
         self.grads = {'W' : None, 'b' : None}
