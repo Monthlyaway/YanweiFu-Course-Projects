@@ -268,3 +268,160 @@ I found the most difficult aspect was getting the backward pass right. It requir
 While my implementation is not optimized for performance (it uses naive loops instead of vectorized operations), it helped me build a deeper understanding of CNNs. In real-world applications, we would use libraries like PyTorch or TensorFlow that implement highly optimized convolution operations, but implementing it from scratch was an invaluable learning experience.
 
 I gained a much better appreciation for why CNNs work so well for image processing tasks - the parameter sharing and local connectivity are powerful inductive biases that drastically reduce the number of parameters compared to fully connected networks while preserving spatial information.
+
+## Learning Rate Schedulers
+
+Adjusting the learning rate during training is a common technique to improve convergence and final model performance. I implemented a few learning rate schedulers to experiment with this. The idea is to start with a relatively high learning rate to make quick progress initially, and then decrease it as training progresses to fine-tune the model and avoid overshooting the optimal solution.
+
+### Base Scheduler Class
+
+I started by creating a base `scheduler` class to define the common interface:
+
+```python
+class scheduler():
+    def __init__(self, optimizer) -> None:
+        self.optimizer = optimizer
+        self.step_count = 0 
+        self.initial_lr = optimizer.init_lr # Store initial LR
+
+    @abstractmethod
+    def step(self):
+        pass
+
+    def get_lr(self):
+        return self.optimizer.init_lr
+```
+This base class holds a reference to the optimizer and tracks the number of steps (which could be epochs or iterations depending on how it's used).
+
+### StepLR (Already Provided)
+
+The `StepLR` scheduler decreases the learning rate by a factor `gamma` every `step_size` steps. The update rule is:
+
+$$ \text{lr}_{\text{new}} = \text{lr}_{\text{old}} \times \gamma \quad \text{if} \quad \text{step\_count} \mod \text{step\_size} == 0 $$
+
+### MultiStepLR
+
+This scheduler is similar to `StepLR`, but instead of decaying the learning rate at regular intervals, it decays it at specific milestones (e.g., specific epoch numbers).
+
+Let $\text{lr}_0$ be the initial learning rate, $M = \{m_1, m_2, ..., m_k\}$ be the set of milestone steps (epochs), and $\gamma$ be the decay factor. The learning rate $\text{lr}_t$ at step $t$ is updated as follows:
+
+$$ \text{lr}_t = \text{lr}_0 \times \gamma^k \quad \text{where } k = |\{m \in M \mid m \le t\}| $$
+
+In simpler terms, every time the current step $t$ crosses a milestone $m_i$, the learning rate is multiplied by $\gamma$.
+
+My implementation looks like this:
+
+```python
+class MultiStepLR(scheduler):
+    def __init__(self, optimizer, milestones, gamma=0.1) -> None:
+        super().__init__(optimizer)
+        # ... (error checking for milestones)
+        self.milestones = milestones
+        self.gamma = gamma
+        self.last_lr_update_step = -1 
+
+    def step(self) -> None:
+        self.step_count += 1
+        if self.step_count in self.milestones and self.step_count > self.last_lr_update_step:
+            new_lr = self.optimizer.init_lr * self.gamma
+            # ... (optional print statement)
+            self.optimizer.init_lr = new_lr
+            self.last_lr_update_step = self.step_count 
+```
+This allows for more flexible control over when the learning rate changes compared to `StepLR`.
+
+### ExponentialLR
+
+The `ExponentialLR` scheduler decays the learning rate by a factor `gamma` at *every* step.
+
+The update rule is:
+
+$$ \text{lr}_t = \text{lr}_{t-1} \times \gamma $$
+
+Or, expressed in terms of the initial learning rate $\text{lr}_0$:
+
+$$ \text{lr}_t = \text{lr}_0 \times \gamma^t $$
+
+where $t$ is the current step number.
+
+The implementation is quite straightforward:
+
+```python
+class ExponentialLR(scheduler):
+    def __init__(self, optimizer, gamma) -> None:
+        super().__init__(optimizer)
+        self.gamma = gamma
+
+    def step(self) -> None:
+        self.step_count += 1
+        new_lr = self.optimizer.init_lr * self.gamma
+        self.optimizer.init_lr = new_lr
+```
+This scheduler provides a smooth, continuous decay of the learning rate over time.
+
+Implementing these schedulers helped me understand how dynamically adjusting hyperparameters like the learning rate can be beneficial during the training process. Choosing the right scheduler and its parameters (like milestones or gamma) often requires experimentation and depends on the specific dataset and model architecture.
+
+## Momentum Gradient Descent (MomentGD)
+
+While standard Stochastic Gradient Descent (SGD) is a good starting point, it can sometimes be slow to converge, especially in areas with high curvature or noisy gradients. I learned about Momentum Gradient Descent (MomentGD) as a way to improve upon SGD.
+
+### The Problem with SGD
+
+Imagine a ball rolling down a hilly landscape (representing the loss surface). SGD takes steps directly in the direction of the steepest descent at each point. If the landscape has narrow valleys or ravines, SGD can oscillate back and forth across the valley instead of moving smoothly along the bottom towards the minimum.
+
+### Introducing Momentum
+
+Momentum helps address this by adding a "velocity" term to the update rule. Think of it like giving the rolling ball some inertia. Instead of just considering the current gradient, the update also incorporates a fraction of the previous update direction.
+
+The update rules for Momentum GD are:
+
+1.  **Update Velocity:**
+    $$ v_t = \mu v_{t-1} - \eta \nabla L(\theta_{t-1}) $$
+
+2.  **Update Parameters:**
+    $$ \theta_t = \theta_{t-1} + v_t $$
+
+where:
+- $\theta$ represents the parameters (weights and biases)
+- $\eta$ is the learning rate (`init_lr` in my code)
+- $\nabla L(\theta_{t-1})$ is the gradient of the loss function with respect to the parameters at the previous step (`layer.grads[key]` in my code, potentially including weight decay)
+- $\mu$ is the momentum coefficient (usually around 0.9)
+- $v_t$ is the velocity (or momentum) vector at step $t$
+
+The velocity $v_t$ is essentially an exponentially decaying moving average of the past gradients. If gradients consistently point in the same direction, the velocity builds up, leading to faster convergence. If gradients oscillate, the momentum term helps to dampen these oscillations.
+
+### Implementation Details
+
+In my implementation, I needed to store the velocity for each parameter. I used a dictionary `self.velocities` for this:
+
+```python
+class MomentGD(Optimizer):
+    def __init__(self, init_lr, model, mu=0.9):
+        super().__init__(init_lr, model)
+        self.mu = mu
+        # Initialize velocity dictionary
+        self.velocities = {} 
+        for i, layer in enumerate(self.model.layers):
+             if hasattr(layer, 'optimizable') and layer.optimizable:
+                self.velocities[i] = {}
+                for key in layer.params.keys():
+                    # Initialize velocity to zero
+                    self.velocities[i][key] = np.zeros_like(layer.params[key])
+
+    def step(self):
+        for i, layer in enumerate(self.model.layers):
+             if hasattr(layer, 'optimizable') and layer.optimizable:
+                for key in layer.params.keys():
+                    # Calculate gradient (including weight decay if needed)
+                    grad_update = layer.grads[key]
+                    if hasattr(layer, 'weight_decay') and layer.weight_decay:
+                        grad_update += layer.weight_decay_lambda * layer.params[key]
+
+                    # Update velocity: v = mu * v - lr * grad
+                    self.velocities[i][key] = self.mu * self.velocities[i][key] - self.init_lr * grad_update
+
+                    # Update parameter: param = param + v
+                    layer.params[key] += self.velocities[i][key]
+```
+
+Implementing Momentum GD was interesting because it showed me how a simple modification to the basic SGD update rule could lead to significantly better optimization behavior in practice. It helps the optimizer "remember" past directions and move more confidently towards the minimum.
