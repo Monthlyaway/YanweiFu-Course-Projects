@@ -84,3 +84,10 @@ class RunnerM():
     
     def save_model(self, save_path):
         self.model.save_model(save_path)
+        
+    def load_model(self, load_path):
+        """
+        Load a model from a saved file
+        load_path: Path to the pickle file containing model parameters
+        """
+        self.model.load_model(load_path)
