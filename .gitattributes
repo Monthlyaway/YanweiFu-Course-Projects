@@ -1,1 +1,2 @@
 lab1/data/cifar-10-python.tar.gz filter=lfs diff=lfs merge=lfs -text
+pj1/dataset/MNIST/** filter=lfs diff=lfs merge=lfs -text
