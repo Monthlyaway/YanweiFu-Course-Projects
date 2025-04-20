@@ -137,7 +137,15 @@ class MultiCrossEntropyLoss(Layer):
     A multi-cross-entropy loss layer, with Softmax layer in it, which could be cancelled by method cancel_softmax
     """
     def __init__(self, model = None, max_classes = 10) -> None:
-        pass
+        super().__init__()
+        self.model = model
+        self.max_classes = max_classes
+        self.has_softmax = True  # By default, softmax is applied
+        self.input = None        # Store input for backward pass
+        self.softmax_output = None  # Store softmax output
+        self.labels = None       # Store labels for backward pass
+        self.optimizable = False
+        self.grads = None        # Store gradients for backward pass
 
     def __call__(self, predicts, labels):
         return self.forward(predicts, labels)
@@ -148,19 +156,58 @@ class MultiCrossEntropyLoss(Layer):
         labels : [batch_size, ]
         This function generates the loss.
         """
-        # / ---- your codes here ----/
-        pass
+        self.input = predicts
+        self.labels = labels
+        batch_size = predicts.shape[0]
+        
+        # Apply softmax if required
+        if self.has_softmax:
+            self.softmax_output = softmax(predicts)
+        else:
+            self.softmax_output = predicts
+            
+        # Create one-hot encoded labels
+        # Note: This could be optimized in a real implementation
+        one_hot_labels = np.zeros((batch_size, self.max_classes))
+        for i in range(batch_size):
+            one_hot_labels[i, labels[i]] = 1
+            
+        # Calculate cross-entropy loss
+        # L = -sum(y_true * log(y_pred))
+        # Add a small epsilon to avoid log(0)
+        epsilon = 1e-10
+        log_probs = np.log(self.softmax_output + epsilon)
+        loss = -np.sum(one_hot_labels * log_probs) / batch_size
+        
+        return loss
     
     def backward(self):
         # first compute the grads from the loss to the input
-        # / ---- your codes here ----/
+        batch_size = self.input.shape[0]
+        
+        # If softmax was applied in the forward pass, gradient is (softmax_output - one_hot_labels)
+        # Otherwise, gradient needs to be computed based on specific loss function
+        if self.has_softmax:
+            # Create one-hot encoded labels
+            one_hot_labels = np.zeros((batch_size, self.max_classes))
+            for i in range(batch_size):
+                one_hot_labels[i, self.labels[i]] = 1
+                
+            # Gradient of softmax cross-entropy: softmax_output - one_hot_labels
+            # Divide by batch_size for averaging
+            self.grads = (self.softmax_output - one_hot_labels) / batch_size
+        else:
+            # If no softmax was applied, this would depend on the loss function used
+            # For simple cross-entropy with probabilities, this might be different
+            raise NotImplementedError("Backward without softmax not implemented")
+            
         # Then send the grads to model for back propagation
         self.model.backward(self.grads)
 
     def cancel_soft_max(self):
         self.has_softmax = False
         return self
-    
+
 class L2Regularization(Layer):
     """
     L2 Reg can act as weight decay that can be implemented in class Linear.
