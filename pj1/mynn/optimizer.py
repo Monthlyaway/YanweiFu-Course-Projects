@@ -57,37 +57,53 @@ class SGD(Optimizer):
 class MomentGD(Optimizer):
     """
     Implements Momentum Gradient Descent.
-    This optimizer helps accelerate SGD in the relevant direction and dampens oscillations.
+    
+    This optimizer adds a velocity term to SGD, which helps accelerate gradients
+    in the right direction and dampens oscillations. It's especially helpful
+    for navigating through ravines (areas where the curvature is much steeper in one
+    dimension than in others).
     """
     def __init__(self, init_lr, model, mu=0.9):
         """
         Initializes the Momentum Gradient Descent optimizer.
 
         Args:
-            init_lr (float): Learning rate.
+            init_lr (float): Initial learning rate.
             model: The model to optimize.
-            mu (float): Momentum factor (typically close to 1, e.g., 0.9). Default: 0.9.
+            mu (float): Momentum coefficient, controls the contribution
+                        of the previous gradient step to the current iteration.
+                        Typically set to a value between 0.5 and 0.99. Default: 0.9.
         """
         super().__init__(init_lr, model)
         self.mu = mu
+        
         # Initialize velocity dictionary to store momentum for each parameter
         self.velocities = {}
+        
         for i, layer in enumerate(self.model.layers):
-             if hasattr(layer, 'optimizable') and layer.optimizable:
+            if hasattr(layer, 'optimizable') and layer.optimizable:
                 self.velocities[i] = {}
                 for key in layer.params.keys():
                     # Initialize velocity to zero with the same shape as the parameter
                     self.velocities[i][key] = np.zeros_like(layer.params[key])
 
     def step(self):
-        """Performs a single optimization step using Momentum GD."""
+        """
+        Performs a single optimization step using Momentum Gradient Descent.
+        
+        The update rule is:
+        velocity = mu * velocity - learning_rate * gradient
+        parameter = parameter + velocity
+        """
         for i, layer in enumerate(self.model.layers):
-             if hasattr(layer, 'optimizable') and layer.optimizable:
+            if hasattr(layer, 'optimizable') and layer.optimizable:
                 for key in layer.params.keys():
-                    # Calculate the raw gradient update (including weight decay if applicable)
+                    # Calculate the gradient update (possibly including weight decay)
                     grad_update = layer.grads[key]
+                    
+                    # Apply weight decay if the layer has it enabled
                     if hasattr(layer, 'weight_decay') and layer.weight_decay:
-                        grad_update += layer.weight_decay_lambda * layer.params[key]
+                        grad_update = grad_update + layer.weight_decay_lambda * layer.params[key]
 
                     # Update velocity: v = mu * v - lr * grad
                     self.velocities[i][key] = self.mu * self.velocities[i][key] - self.init_lr * grad_update
