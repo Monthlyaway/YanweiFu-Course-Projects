@@ -376,3 +376,108 @@ def softmax(X):
     x_exp = np.exp(X - x_max)
     partition = np.sum(x_exp, axis=1, keepdims=True)
     return x_exp / partition
+
+
+class CrossEntropyLoss(Layer):
+    """
+    Implements cross entropy loss with softmax activation for multi-class classification.
+    
+    The softmax function converts raw logits to probabilities using:
+    p(y_i) = exp(z_i) / sum(exp(z_j))
+    
+    The cross entropy loss then computes:
+    L = -sum(y_true * log(p(y_i)))
+    
+    Where:
+    - z_i are the raw logits from the network
+    - y_true are one-hot encoded ground truth labels
+    """
+    
+    def __init__(self, model=None, num_classes=10) -> None:
+        """
+        Initialize the CrossEntropyLoss layer.
+        
+        Args:
+            model: The model this loss is attached to (for backward propagation)
+            num_classes: Number of classes in the classification task
+        """
+        super().__init__()
+        self.model = model
+        self.num_classes = num_classes
+        self.input = None        # Store input logits for backward pass
+        self.softmax_output = None  # Store softmax probabilities
+        self.labels = None       # Store true labels for backward pass
+        self.optimizable = False
+        self.grads = None        # Store gradients for backward pass
+    
+    def __call__(self, logits, labels):
+        """
+        Compute the cross entropy loss for the given logits and labels.
+        
+        Args:
+            logits: Raw output from the network [batch_size, num_classes]
+            labels: Ground truth labels [batch_size,]
+            
+        Returns:
+            Cross entropy loss value (scalar)
+        """
+        return self.forward(logits, labels)
+    
+    def forward(self, logits, labels):
+        """
+        Forward pass to compute the cross entropy loss.
+        
+        Args:
+            logits: Raw output from the network [batch_size, num_classes]
+            labels: Ground truth labels [batch_size,]
+            
+        Returns:
+            Cross entropy loss value (scalar)
+        """
+        self.input = logits
+        self.labels = labels
+        batch_size = logits.shape[0]
+        
+        # Apply softmax with numerical stability
+        # Subtract max value for numerical stability
+        self.softmax_output = softmax(logits)
+        
+        # Create one-hot encoded labels
+        one_hot_labels = np.zeros((batch_size, self.num_classes))
+        for i in range(batch_size):
+            one_hot_labels[i, labels[i]] = 1
+        
+        # Calculate cross entropy loss
+        # Add small epsilon to avoid log(0)
+        epsilon = 1e-15
+        log_probs = np.log(self.softmax_output + epsilon)
+        loss = -np.sum(one_hot_labels * log_probs) / batch_size
+        
+        return loss
+    
+    def backward(self):
+        """
+        Backward pass to compute gradients and propagate them through the model.
+        
+        The gradient of softmax cross entropy loss with respect to logits is:
+        dL/dz_i = p(y_i) - y_true_i
+        
+        Returns:
+            None (gradients are stored and passed to the model)
+        """
+        batch_size = self.input.shape[0]
+        
+        # Create one-hot encoded labels
+        one_hot_labels = np.zeros((batch_size, self.num_classes))
+        for i in range(batch_size):
+            one_hot_labels[i, self.labels[i]] = 1
+        
+        # Compute gradient: softmax_output - one_hot_labels
+        # Normalize by batch size
+        self.grads = (self.softmax_output - one_hot_labels) / batch_size
+        
+        # Propagate gradients through the model
+        if self.model is not None:
+            self.model.backward(self.grads)
+        
+        return self.grads

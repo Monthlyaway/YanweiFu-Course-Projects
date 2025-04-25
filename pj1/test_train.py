@@ -73,11 +73,13 @@ linear_model = nn.models.Model_MLP(
     act_func='ReLU',
     lambda_list=[1e-4, 1e-4]  # Weight decay for layer 1 and layer 2
 )
-print("Model created.")
+print(f"Model: {linear_model.__class__.__name__}")
 
 # Define Optimizer
-optimizer = nn.optimizer.SGD(init_lr=0.06, model=linear_model)
-# optimizer = nn.optimizer.MomentGD(init_lr=0.01, model=linear_model, mu=0.9) # Example using MomentGD
+# optimizer = nn.optimizer.SGD(init_lr=0.06, model=linear_model)
+optimizer = nn.optimizer.MomentGD(init_lr=0.01, model=linear_model, mu=0.9) # Example using MomentGD
+# optimizer = nn.optimizer.AlternativeMomentGD(init_lr=0.1, model=linear_model, beta=0.0005) # Using AlternativeMomentGD
+print(f"Optimizer: {optimizer.__class__.__name__}")
 
 # Define Learning Rate Scheduler
 # Note: RunnerM steps the scheduler per *iteration* by default.
@@ -87,14 +89,18 @@ scheduler = nn.lr_scheduler.MultiStepLR(
     milestones=[800, 2400, 4000],  # Iteration milestones for LR decay
     gamma=0.5
 )
-print("Optimizer and Scheduler created.")
+print(f"Scheduler: {scheduler.__class__.__name__}")
 
 # Define Loss Function (includes Softmax)
-loss_fn = nn.op.MultiCrossEntropyLoss(
+# loss_fn = nn.op.MultiCrossEntropyLoss(
+#     model=linear_model,
+#     max_classes=int(train_labs.max() + 1)  # Should be 10 for MNIST
+# )
+loss_fn = nn.op.CrossEntropyLoss(
     model=linear_model,
-    max_classes=int(train_labs.max() + 1)  # Should be 10 for MNIST
+    num_classes=int(train_labs.max() + 1)  # Should be 10 for MNIST
 )
-print("Loss function created.")
+print(f"Loss function: {loss_fn.__class__.__name__}")
 
 # --- Runner Setup ---
 # Use forward slash for save_dir path
