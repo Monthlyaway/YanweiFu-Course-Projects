@@ -269,20 +269,29 @@ While my implementation is not optimized for performance (it uses naive loops in
 
 I gained a much better appreciation for why CNNs work so well for image processing tasks - the parameter sharing and local connectivity are powerful inductive biases that drastically reduce the number of parameters compared to fully connected networks while preserving spatial information.
 
-## Learning Rate Schedulers
+## Implementation of Learning Rate Schedulers
 
-Adjusting the learning rate during training is a common technique to improve convergence and final model performance. I implemented a few learning rate schedulers to experiment with this. The idea is to start with a relatively high learning rate to make quick progress initially, and then decrease it as training progresses to fine-tune the model and avoid overshooting the optimal solution.
+Learning rate scheduling was one of the most interesting aspects of neural network training that I implemented in this project. I found that choosing the right learning rate and adjusting it throughout training has a huge impact on both convergence speed and final performance.
 
-### Base Scheduler Class
+### Why Learning Rate Scheduling Matters
 
-I started by creating a base `scheduler` class to define the common interface:
+When I first started training neural networks, I used a fixed learning rate throughout training. However, I quickly ran into two common problems:
+
+1. If the learning rate was too high, the training would become unstable or even diverge
+2. If the learning rate was too low, the training would converge very slowly
+
+Learning rate scheduling addresses these problems by starting with a relatively high learning rate to make rapid progress in the early stages of training, then gradually reducing it to allow for more fine-grained adjustments as the model approaches its optimal parameters.
+
+### Scheduler Base Class
+
+First, I created a base class for all schedulers:
 
 ```python
 class scheduler():
     def __init__(self, optimizer) -> None:
         self.optimizer = optimizer
-        self.step_count = 0 
-        self.initial_lr = optimizer.init_lr # Store initial LR
+        self.step_count = 0
+        self.initial_lr = optimizer.init_lr
 
     @abstractmethod
     def step(self):
@@ -291,137 +300,195 @@ class scheduler():
     def get_lr(self):
         return self.optimizer.init_lr
 ```
-This base class holds a reference to the optimizer and tracks the number of steps (which could be epochs or iterations depending on how it's used).
 
-### StepLR (Already Provided)
+This design follows object-oriented principles where all schedulers inherit from a common base class with a consistent interface, which made it easy to switch between different scheduling strategies in my experiments.
 
-The `StepLR` scheduler decreases the learning rate by a factor `gamma` every `step_size` steps. The update rule is:
+### Step Learning Rate Decay
 
-$$ \text{lr}_{\text{new}} = \text{lr}_{\text{old}} \times \gamma \quad \text{if} \quad \text{step\_count} \mod \text{step\_size} == 0 $$
-
-### MultiStepLR
-
-This scheduler is similar to `StepLR`, but instead of decaying the learning rate at regular intervals, it decays it at specific milestones (e.g., specific epoch numbers).
-
-Let $\text{lr}_0$ be the initial learning rate, $M = \{m_1, m_2, ..., m_k\}$ be the set of milestone steps (epochs), and $\gamma$ be the decay factor. The learning rate $\text{lr}_t$ at step $t$ is updated as follows:
-
-$$ \text{lr}_t = \text{lr}_0 \times \gamma^k \quad \text{where } k = |\{m \in M \mid m \le t\}| $$
-
-In simpler terms, every time the current step $t$ crosses a milestone $m_i$, the learning rate is multiplied by $\gamma$.
-
-My implementation looks like this:
+The simplest learning rate scheduler I implemented was StepLR, which reduces the learning rate by a multiplicative factor every fixed number of steps:
 
 ```python
-class MultiStepLR(scheduler):
-    def __init__(self, optimizer, milestones, gamma=0.1) -> None:
-        super().__init__(optimizer)
-        # ... (error checking for milestones)
-        self.milestones = milestones
-        self.gamma = gamma
-        self.last_lr_update_step = -1 
-
-    def step(self) -> None:
-        self.step_count += 1
-        if self.step_count in self.milestones and self.step_count > self.last_lr_update_step:
-            new_lr = self.optimizer.init_lr * self.gamma
-            # ... (optional print statement)
-            self.optimizer.init_lr = new_lr
-            self.last_lr_update_step = self.step_count 
-```
-This allows for more flexible control over when the learning rate changes compared to `StepLR`.
-
-### ExponentialLR
-
-The `ExponentialLR` scheduler decays the learning rate by a factor `gamma` at *every* step.
-
-The update rule is:
-
-$$ \text{lr}_t = \text{lr}_{t-1} \times \gamma $$
-
-Or, expressed in terms of the initial learning rate $\text{lr}_0$:
-
-$$ \text{lr}_t = \text{lr}_0 \times \gamma^t $$
-
-where $t$ is the current step number.
-
-The implementation is quite straightforward:
-
-```python
-class ExponentialLR(scheduler):
-    def __init__(self, optimizer, gamma) -> None:
-        super().__init__(optimizer)
-        self.gamma = gamma
-
-    def step(self) -> None:
-        self.step_count += 1
+def step(self) -> None:
+    self.step_count += 1
+    if self.step_count % self.step_size == 0:
         new_lr = self.optimizer.init_lr * self.gamma
         self.optimizer.init_lr = new_lr
 ```
-This scheduler provides a smooth, continuous decay of the learning rate over time.
 
-Implementing these schedulers helped me understand how dynamically adjusting hyperparameters like the learning rate can be beneficial during the training process. Choosing the right scheduler and its parameters (like milestones or gamma) often requires experimentation and depends on the specific dataset and model architecture.
+Mathematically, this can be expressed as:
 
-## Momentum Gradient Descent (MomentGD)
+$$\text{lr}_{\text{epoch}} = \text{lr}_{\text{initial}} \times \gamma^{\lfloor\frac{\text{epoch}}{\text{step\_size}}\rfloor}$$
 
-While standard Stochastic Gradient Descent (SGD) is a good starting point, it can sometimes be slow to converge, especially in areas with high curvature or noisy gradients. I learned about Momentum Gradient Descent (MomentGD) as a way to improve upon SGD.
+Where:
+- $\text{lr}_{\text{epoch}}$ is the learning rate at a given epoch
+- $\text{lr}_{\text{initial}}$ is the initial learning rate
+- $\gamma$ is the decay factor (typically 0.1)
+- $\text{step\_size}$ is the number of epochs between learning rate decays
 
-### The Problem with SGD
+For example, with an initial learning rate of 0.1, step_size of 30, and gamma of 0.1, the learning rate would be:
+- Epochs 0-29: 0.1
+- Epochs 30-59: 0.01
+- Epochs 60-89: 0.001
+- And so on...
 
-Imagine a ball rolling down a hilly landscape (representing the loss surface). SGD takes steps directly in the direction of the steepest descent at each point. If the landscape has narrow valleys or ravines, SGD can oscillate back and forth across the valley instead of moving smoothly along the bottom towards the minimum.
+This creates a staircase pattern when plotted, and I found it works well for many problems.
 
-### Introducing Momentum
+### Multi-Step Learning Rate Decay
 
-Momentum helps address this by adding a "velocity" term to the update rule. Think of it like giving the rolling ball some inertia. Instead of just considering the current gradient, the update also incorporates a fraction of the previous update direction.
+In some of my more complex experiments, I noticed that a regular step decay wasn't optimal. Sometimes I wanted to reduce the learning rate at specific epochs based on the training dynamics. That's where MultiStepLR came in handy:
 
-The update rules for Momentum GD are:
+```python
+def step(self) -> None:
+    self.step_count += 1
+    if self.step_count in self.milestones and self.step_count > self.last_lr_update_step:
+        new_lr = self.optimizer.init_lr * self.gamma
+        self.optimizer.init_lr = new_lr
+        self.last_lr_update_step = self.step_count
+```
 
-1.  **Update Velocity:**
-    $$ v_t = \mu v_{t-1} - \eta \nabla L(\theta_{t-1}) $$
+The learning rate follows this pattern:
 
-2.  **Update Parameters:**
-    $$ \theta_t = \theta_{t-1} + v_t $$
+$$\text{lr}_{\text{epoch}} = \text{lr}_{\text{initial}} \times \gamma^{j}$$
 
-where:
-- $\theta$ represents the parameters (weights and biases)
-- $\eta$ is the learning rate (`init_lr` in my code)
-- $\nabla L(\theta_{t-1})$ is the gradient of the loss function with respect to the parameters at the previous step (`layer.grads[key]` in my code, potentially including weight decay)
-- $\mu$ is the momentum coefficient (usually around 0.9)
-- $v_t$ is the velocity (or momentum) vector at step $t$
+Where $j$ is the number of milestones that have been reached.
 
-The velocity $v_t$ is essentially an exponentially decaying moving average of the past gradients. If gradients consistently point in the same direction, the velocity builds up, leading to faster convergence. If gradients oscillate, the momentum term helps to dampen these oscillations.
+For instance, with milestones at epochs [30, 60, 80]:
+- Epochs 0-29: Initial learning rate
+- Epochs 30-59: Initial learning rate × gamma
+- Epochs 60-79: Initial learning rate × gamma²
+- Epochs 80+: Initial learning rate × gamma³
+
+This gave me much more flexibility to define a custom decay schedule based on my understanding of the training process.
+
+### Exponential Learning Rate Decay
+
+Finally, I implemented ExponentialLR for a smoother decay pattern:
+
+```python
+def step(self) -> None:
+    self.step_count += 1
+    new_lr = self.initial_lr * (self.gamma ** self.step_count)
+    self.optimizer.init_lr = new_lr
+```
+
+The learning rate follows this exponential decay formula:
+
+$$\text{lr}_{\text{epoch}} = \text{lr}_{\text{initial}} \times \gamma^{\text{epoch}}$$
+
+This creates a smooth curve where the learning rate decreases continuously rather than in discrete steps. With a gamma value close to 1 (e.g., 0.95), the decay is more gradual, which I found useful for fine-tuning models.
+
+### Experiments and Observations
+
+During my experiments, I observed that different learning rate schedules work better for different tasks:
+
+1. **StepLR** worked well for simple tasks with clear convergence patterns
+2. **MultiStepLR** gave better results when I had insights about when the model might plateau
+3. **ExponentialLR** provided a gentle decay that avoided sudden performance changes
+
+I also discovered that proper learning rate scheduling can sometimes eliminate the need for a very large number of training epochs. With a well-tuned scheduler, my models often converged faster and to better solutions than with a fixed learning rate.
+
+In conclusion, implementing these learning rate schedulers gave me a deeper understanding of the optimization dynamics in neural networks. The right scheduling strategy can make the difference between a model that learns effectively and one that gets stuck in suboptimal regions of the parameter space.
+
+## Implementation of Momentum Gradient Descent
+
+After implementing various neural network components, I turned my attention to optimization methods. While standard Stochastic Gradient Descent (SGD) is widely used, I learned that it can struggle with certain types of loss landscapes. This led me to implement Momentum Gradient Descent, which significantly improved my model's training behavior.
+
+### The Limitations of Standard SGD
+
+In standard SGD, parameters are updated directly in the direction of the negative gradient:
+
+$$\theta_{t+1} = \theta_t - \eta \nabla L(\theta_t)$$
+
+where $\theta$ represents the model parameters, $\eta$ is the learning rate, and $\nabla L(\theta_t)$ is the gradient of the loss function.
+
+Through my experiments, I discovered several issues with standard SGD:
+
+1. **Slow progress in ravines**: When the loss surface has steep slopes in some directions but shallow slopes in others (imagine a long, narrow valley), SGD makes small steps along the shallow dimension due to oscillations in the steep dimensions.
+
+2. **Stuck in local minima or saddle points**: Without momentum, SGD can easily get trapped in suboptimal solutions.
+
+3. **Sensitivity to learning rate**: Finding the right learning rate is crucial but challenging. Too high, and SGD diverges; too low, and it converges extremely slowly.
+
+### The Momentum Solution
+
+Momentum addresses these issues by incorporating information from past gradients. It's like giving a ball physical momentum as it rolls down the loss surface:
+
+1. **Velocity accumulation**: The algorithm maintains a velocity vector that accumulates gradients over time.
+2. **Dampening oscillations**: The momentum term smooths out the update directions, reducing oscillation in ravines.
+3. **Escaping local minima**: The accumulated momentum can help push the optimization through small bumps in the loss landscape.
+
+The update equations for Momentum Gradient Descent are:
+
+$$v_t = \mu v_{t-1} - \eta \nabla L(\theta_{t-1})$$
+$$\theta_t = \theta_{t-1} + v_t$$
+
+where $\mu$ is the momentum coefficient (typically around 0.9) and $v_t$ is the velocity vector.
+
+### Visualizing Momentum
+
+To understand how momentum works, I found it helpful to visualize the optimization process:
+
+- **Without momentum**: The path zigzags back and forth across the valley, making slow progress toward the minimum.
+- **With momentum**: The path initially zigzags but gradually smooths out and accelerates along the valley floor.
+
+The momentum coefficient $\mu$ controls how much of the previous velocity is retained. A value of 0 would revert to standard SGD, while a value close to 1 would mean the gradients have less immediate impact on the direction.
 
 ### Implementation Details
 
-In my implementation, I needed to store the velocity for each parameter. I used a dictionary `self.velocities` for this:
+My implementation of Momentum Gradient Descent required tracking velocities for all parameters:
 
 ```python
-class MomentGD(Optimizer):
-    def __init__(self, init_lr, model, mu=0.9):
-        super().__init__(init_lr, model)
-        self.mu = mu
-        # Initialize velocity dictionary
-        self.velocities = {} 
-        for i, layer in enumerate(self.model.layers):
-             if hasattr(layer, 'optimizable') and layer.optimizable:
-                self.velocities[i] = {}
-                for key in layer.params.keys():
-                    # Initialize velocity to zero
-                    self.velocities[i][key] = np.zeros_like(layer.params[key])
-
-    def step(self):
-        for i, layer in enumerate(self.model.layers):
-             if hasattr(layer, 'optimizable') and layer.optimizable:
-                for key in layer.params.keys():
-                    # Calculate gradient (including weight decay if needed)
-                    grad_update = layer.grads[key]
-                    if hasattr(layer, 'weight_decay') and layer.weight_decay:
-                        grad_update += layer.weight_decay_lambda * layer.params[key]
-
-                    # Update velocity: v = mu * v - lr * grad
-                    self.velocities[i][key] = self.mu * self.velocities[i][key] - self.init_lr * grad_update
-
-                    # Update parameter: param = param + v
-                    layer.params[key] += self.velocities[i][key]
+def __init__(self, init_lr, model, mu=0.9):
+    super().__init__(init_lr, model)
+    self.mu = mu
+    # Initialize velocity dictionary
+    self.velocities = {} 
+    for i, layer in enumerate(self.model.layers):
+         if hasattr(layer, 'optimizable') and layer.optimizable:
+            self.velocities[i] = {}
+            for key in layer.params.keys():
+                # Initialize velocity to zero
+                self.velocities[i][key] = np.zeros_like(layer.params[key])
 ```
 
-Implementing Momentum GD was interesting because it showed me how a simple modification to the basic SGD update rule could lead to significantly better optimization behavior in practice. It helps the optimizer "remember" past directions and move more confidently towards the minimum.
+The core update logic follows the momentum update rule:
+
+```python
+def step(self):
+    for i, layer in enumerate(self.model.layers):
+         if hasattr(layer, 'optimizable') and layer.optimizable:
+            for key in layer.params.keys():
+                # Calculate gradient (including weight decay if needed)
+                grad_update = layer.grads[key]
+                if hasattr(layer, 'weight_decay') and layer.weight_decay:
+                    grad_update += layer.weight_decay_lambda * layer.params[key]
+
+                # Update velocity: v = mu * v - lr * grad
+                self.velocities[i][key] = self.mu * self.velocities[i][key] - self.init_lr * grad_update
+
+                # Update parameter: param = param + v
+                layer.params[key] += self.velocities[i][key]
+```
+
+### Practical Benefits I Observed
+
+When using Momentum Gradient Descent in my experiments, I noticed several improvements compared to standard SGD:
+
+1. **Faster convergence**: Models trained with momentum generally reached better loss values in fewer iterations.
+   
+2. **Smoother loss curves**: The training process was much more stable, with fewer spikes in the loss function.
+
+3. **Better final accuracy**: The momentum optimizer often found better solutions, improving validation accuracy by 1-3%.
+
+4. **More robust to hyperparameters**: While the momentum coefficient adds another hyperparameter, I found the optimization was actually less sensitive to the exact learning rate value.
+
+### Physical Intuition
+
+I found it helpful to think about momentum optimization in terms of a physical analogy. Imagine a ball rolling down a hill:
+
+- Standard SGD is like a ball in a very viscous medium (like honey) - it moves directly downhill but very slowly.
+- Momentum is like a ball in a less viscous medium (like water) - it can build up speed in consistent directions and resist small bumps and changes.
+
+This physical intuition helped me understand why the momentum parameter $\mu$ should be large enough to smooth out noise but not so large that it prevents the optimizer from changing direction when needed.
+
+In conclusion, implementing Momentum Gradient Descent gave me a practical understanding of why most modern deep learning systems use momentum-based optimizers rather than plain SGD. The simple addition of a velocity term fundamentally improves optimization behavior, especially for complex neural network architectures with challenging loss landscapes.

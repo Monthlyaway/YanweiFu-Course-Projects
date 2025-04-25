@@ -12,7 +12,8 @@ class RunnerM():
     evaluation, and model saving/loading.
     """
 
-    def __init__(self, model, optimizer, metric, loss_fn, batch_size=32, scheduler=None):
+    def __init__(self, model, optimizer, metric, loss_fn, batch_size=32, scheduler=None, 
+                 is_cnn=False, preprocess_fn=None):
         """
         Initializes the Runner.
 
@@ -29,6 +30,10 @@ class RunnerM():
             batch_size (int): The number of samples per batch during training. Default: 32.
             scheduler: An optional learning rate scheduler instance.
                        Expected to have a step() method. Default: None.
+            is_cnn (bool): Flag indicating if the model is a CNN. This affects data handling.
+                           Default: False.
+            preprocess_fn: Optional function to preprocess data before feeding to model.
+                           Signature: preprocess_fn(X) -> processed_X. Default: None.
         """
         self.model = model
         self.optimizer = optimizer
@@ -36,6 +41,8 @@ class RunnerM():
         self.metric = metric
         self.scheduler = scheduler
         self.batch_size = batch_size
+        self.is_cnn = is_cnn
+        self.preprocess_fn = preprocess_fn
 
         # Lists to store training history (recorded per epoch)
         self.train_scores = []
@@ -43,6 +50,27 @@ class RunnerM():
         self.train_loss = []
         self.dev_loss = []
         self.best_score = -np.inf  # Initialize best score for model saving
+
+    def _preprocess_batch(self, X):
+        """
+        Preprocess a batch of data before feeding to the model.
+        
+        Args:
+            X: Input data batch
+            
+        Returns:
+            Preprocessed data ready for the model
+        """
+        # Apply custom preprocessing if provided
+        if self.preprocess_fn is not None:
+            X = self.preprocess_fn(X)
+            
+        # Handle CNN input formatting if needed
+        if self.is_cnn and len(X.shape) == 3:  # If shape is [batch_size, height, width]
+            # Add channel dimension for grayscale images: [batch_size, height, width] -> [batch_size, 1, height, width]
+            X = X.reshape(X.shape[0], 1, X.shape[1], X.shape[2])
+        
+        return X
 
     def train(self, train_set, dev_set, **kwargs):
         """
@@ -55,11 +83,17 @@ class RunnerM():
                 num_epochs (int): Number of epochs to train for. Default: 0.
                 log_iters (int): Print training progress every `log_iters` iterations. Default: 100.
                 save_dir (str): Directory to save the best performing model. Default: "best_model".
+                scheduler_per_epoch (bool): Whether to step the scheduler once per epoch instead of 
+                                           per iteration. Default: False.
+                early_stopping (int): Number of epochs to wait for improvement before early stopping.
+                                     Set to 0 to disable early stopping. Default: 0.
         """
         # --- Training Setup ---
         num_epochs = kwargs.get("num_epochs", 0)
         log_iters = kwargs.get("log_iters", 100)
         save_dir = kwargs.get("save_dir", "best_model")
+        scheduler_per_epoch = kwargs.get("scheduler_per_epoch", False)
+        early_stopping = kwargs.get("early_stopping", 0)
 
         # Create save directory if it doesn't exist
         if not os.path.exists(save_dir):
@@ -67,7 +101,10 @@ class RunnerM():
             os.makedirs(save_dir)
 
         print(f"Starting training for {num_epochs} epochs...")
-
+        
+        # Early stopping variables
+        epochs_without_improvement = 0
+        
         # --- Epoch Loop ---
         for epoch in range(num_epochs):
             print(f"\n--- Epoch {epoch+1}/{num_epochs} ---")
@@ -84,10 +121,11 @@ class RunnerM():
 
             # --- Iteration (Batch) Loop ---
             num_batches = int(np.ceil(X_train.shape[0] / self.batch_size))
-            # Optional: Add tqdm progress bar
-            # pbar = tqdm(range(num_batches), desc=f"Epoch {epoch+1} Training")
-            # for iteration in pbar:
-            for iteration in range(num_batches):
+            
+            # Use tqdm if available for progress bar
+            iterator = tqdm(range(num_batches), desc=f"Epoch {epoch+1}/{num_epochs}") if 'tqdm' in globals() else range(num_batches)
+            
+            for iteration in iterator:
                 # Get current batch
                 start_idx = iteration * self.batch_size
                 end_idx = min((iteration + 1) *
@@ -97,6 +135,9 @@ class RunnerM():
 
                 if batch_X.shape[0] == 0:  # Skip empty batches
                     continue
+
+                # Preprocess data if needed (especially important for CNNs)
+                batch_X = self._preprocess_batch(batch_X)
 
                 # --- Core Training Steps ---
                 # 1. Forward Pass: Compute model predictions (logits)
@@ -116,11 +157,9 @@ class RunnerM():
                 # 5. Optimizer Step: Update model parameters based on gradients
                 self.optimizer.step()
 
-                # 6. Scheduler Step: Adjust learning rate (if scheduler is used)
-                # Note: Scheduler step timing might vary (per epoch vs per iteration)
-                # This implementation steps per iteration.
-                if self.scheduler is not None:
-                    self.scheduler.step()  # Consider if step should be per epoch instead
+                # 6. Scheduler Step: Adjust learning rate (if scheduler is used and per-iteration stepping is enabled)
+                if self.scheduler is not None and not scheduler_per_epoch:
+                    self.scheduler.step()
 
                 # --- Logging Iteration Progress (Optional) ---
                 if (iteration + 1) % log_iters == 0:
@@ -129,10 +168,13 @@ class RunnerM():
                         epoch_train_loss_list[-log_iters:])
                     avg_batch_score = np.mean(
                         epoch_train_scores_list[-log_iters:])
-                    print(
-                        f"  Iter {iteration+1}/{num_batches} | Avg Train Loss (last {log_iters}): {avg_batch_loss:.4f}, Avg Train Score (last {log_iters}): {avg_batch_score:.4f}")
-                    # Optional: Update tqdm progress bar description
-                    # pbar.set_postfix({"Train Loss": f"{avg_batch_loss:.4f}"})
+                    log_msg = f"Iter {iteration+1}/{num_batches} | Loss: {avg_batch_loss:.4f}, Score: {avg_batch_score:.4f}"
+                    
+                    # Update tqdm description if using tqdm, otherwise print
+                    if 'tqdm' in globals():
+                        iterator.set_postfix_str(log_msg)
+                    else:
+                        print(f"  {log_msg}")
 
             # --- End of Epoch ---
             # Calculate average training loss and score for the completed epoch
@@ -140,6 +182,10 @@ class RunnerM():
             avg_epoch_train_score = np.mean(epoch_train_scores_list)
             self.train_loss.append(avg_epoch_train_loss)
             self.train_scores.append(avg_epoch_train_score)
+
+            # Step scheduler once per epoch if configured that way
+            if self.scheduler is not None and scheduler_per_epoch:
+                self.scheduler.step()
 
             # Evaluate on the full development set at the end of the epoch
             dev_score, dev_loss = self.evaluate(dev_set)
@@ -164,6 +210,14 @@ class RunnerM():
                 self.save_model(save_path)
                 print(
                     f"  ** Best dev score improved: {old_best_score:.5f} --> {self.best_score:.5f}. Model saved to {save_path} **")
+                # Reset early stopping counter
+                epochs_without_improvement = 0
+            else:
+                # Increment early stopping counter
+                epochs_without_improvement += 1
+                if early_stopping > 0 and epochs_without_improvement >= early_stopping:
+                    print(f"\nEarly stopping after {early_stopping} epochs without improvement.")
+                    break
 
         print(
             f"\nTraining finished. Best development score: {self.best_score:.5f}")
@@ -182,9 +236,15 @@ class RunnerM():
         X, y = data_set
         if X.shape[0] == 0:
             return 0.0, 0.0  # Handle empty dataset
+            
+        # Preprocess the evaluation data if needed
+        X = self._preprocess_batch(X)
+        
+        # For large datasets, we might need to evaluate in batches
+        if X.shape[0] > 1000 and self.is_cnn:  # Arbitrary threshold for batch evaluation
+            return self._batch_evaluate(X, y)
 
         # Perform forward pass on the entire dataset
-        # Note: For very large datasets, evaluation might also need batching.
         logits = self.model(X)
 
         # Calculate loss
@@ -194,6 +254,42 @@ class RunnerM():
         score = self.metric(logits, y)
 
         return score, loss
+        
+    def _batch_evaluate(self, X, y):
+        """
+        Evaluates the model on a large dataset in batches to avoid memory issues.
+        
+        Args:
+            X: Input data
+            y: Target labels
+            
+        Returns:
+            tuple: A tuple (avg_score, avg_loss) with average score and loss
+        """
+        total_loss = 0
+        total_score = 0
+        num_batches = int(np.ceil(X.shape[0] / self.batch_size))
+        
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * self.batch_size
+            end_idx = min((batch_idx + 1) * self.batch_size, X.shape[0])
+            
+            batch_X = X[start_idx:end_idx]
+            batch_y = y[start_idx:end_idx]
+            
+            # Forward pass
+            logits = self.model(batch_X)
+            
+            # Compute loss and score
+            batch_loss = self.loss_fn(logits, batch_y)
+            batch_score = self.metric(logits, batch_y)
+            
+            # Weight by batch size for proper averaging
+            batch_weight = len(batch_X) / len(X)
+            total_loss += batch_loss * batch_weight
+            total_score += batch_score * batch_weight
+            
+        return total_score, total_loss
 
     def save_model(self, save_path):
         """
