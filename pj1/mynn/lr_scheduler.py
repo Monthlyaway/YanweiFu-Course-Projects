@@ -83,21 +83,24 @@ class MultiStepLR(scheduler):
 class ExponentialLR(scheduler):
     """
     Decays the learning rate of each parameter group by gamma every step.
+    The learning rate is computed as: lr = initial_lr * gamma^step_count
     """
     def __init__(self, optimizer, gamma) -> None:
         """
         Args:
             optimizer: The optimizer instance.
             gamma (float): Multiplicative factor of learning rate decay.
+                           Should be between 0 and 1, typically close to 1 (e.g., 0.95).
         """
         super().__init__(optimizer)
         self.gamma = gamma
 
     def step(self) -> None:
-        """Updates the learning rate exponentially."""
+        """Updates the learning rate exponentially based on the step count."""
         self.step_count += 1
-        # Decay learning rate at every step
-        new_lr = self.optimizer.init_lr * self.gamma
-        # Optional: Add a print statement for debugging, might be too verbose
-        # print(f"ExponentialLR: Step {self.step_count}, reducing learning rate from {self.optimizer.init_lr:.6f} to {new_lr:.6f}")
+        # Apply exponential decay: lr = initial_lr * gamma^step_count
+        new_lr = self.initial_lr * (self.gamma ** self.step_count)
+        # Optional: Add a print statement for debugging every N steps
+        if self.step_count % 100 == 0:
+            print(f"ExponentialLR: Step {self.step_count}, learning rate: {new_lr:.6f}")
         self.optimizer.init_lr = new_lr
