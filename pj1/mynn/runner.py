@@ -206,6 +206,7 @@ class RunnerM():
             if dev_score > self.best_score:
                 old_best_score = self.best_score
                 self.best_score = dev_score
+                self.best_epoch = epoch + 1  # 更新最佳epoch
                 save_path = os.path.join(save_dir, 'best_model.pickle')
                 self.save_model(save_path)
                 print(
