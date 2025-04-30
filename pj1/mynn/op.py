@@ -43,9 +43,11 @@ class Linear(Layer):
         """
         # Store input for backward pass
         self.input = X
+        print(f"[Linear Forward] Input shape: {X.shape}, W shape: {self.W.shape}, b shape: {self.b.shape}")
         # Linear transformation: Y = X·W + b
         # X: [batch_size, in_dim], W: [in_dim, out_dim], b: [1, out_dim]
         output = np.dot(X, self.W) + self.b
+        print(f"[Linear Forward] Output shape: {output.shape}")
         return output
 
     def backward(self, grad: np.ndarray):
@@ -54,22 +56,26 @@ class Linear(Layer):
         output: [batch_size, in_dim] the grad to be passed to the previous layer.
         This function also calculates the grads for W and b.
         """
+        print(f"[Linear Backward] Input gradient shape: {grad.shape}, stored input shape: {self.input.shape}")
         batch_size = self.input.shape[0]
 
         # Gradient with respect to W: dL/dW = X^T · dL/dY
         # self.input: [batch_size, in_dim], grad: [batch_size, out_dim]
         # dW: [in_dim, out_dim]
         dW = np.dot(self.input.T, grad)
+        print(f"[Linear Backward] dW shape: {dW.shape}")
 
         # Gradient with respect to b: dL/db = sum(dL/dY, axis=0)
         # Sum gradients across the batch dimension
         # db: [1, out_dim]
         db = np.sum(grad, axis=0, keepdims=True)
+        print(f"[Linear Backward] db shape: {db.shape}")
 
         # Gradient with respect to X: dL/dX = dL/dY · W^T
         # grad: [batch_size, out_dim], W.T: [out_dim, in_dim]
         # dX: [batch_size, in_dim]
         dX = np.dot(grad, self.W.T)
+        print(f"[Linear Backward] dX shape: {dX.shape}")
 
         # Store gradients for optimizer
         self.grads['W'] = dW
@@ -141,6 +147,7 @@ class conv2D(Layer):
         """
         # Store input for backward pass
         self.input = X
+        print(f"[Conv2D Forward] Input shape: {X.shape}, W shape: {self.W.shape}, b shape: {self.b.shape}")
 
         # Get dimensions
         batch_size, _, input_height, input_width = X.shape
@@ -174,6 +181,7 @@ class conv2D(Layer):
         # Initialize output
         output = np.zeros((batch_size, self.out_channels,
                           output_height, output_width))
+        print(f"[Conv2D Forward] Output shape: {output.shape}")
 
         # Perform convolution operation
         for b in range(batch_size):  # Batch dimension
@@ -202,6 +210,7 @@ class conv2D(Layer):
         grads : [batch_size, out_channel, output_height, output_width]
         return: [batch_size, in_channels, input_height, input_width]
         """
+        print(f"[Conv2D Backward] Input gradient shape: {grads.shape}, stored input shape: {self.input.shape}")
         # Get dimensions
         batch_size, _, output_height, output_width = grads.shape
         _, _, input_height, input_width = self.input.shape
@@ -210,6 +219,8 @@ class conv2D(Layer):
         dW = np.zeros_like(self.W)
         db = np.zeros_like(self.b)
         dX_padded = np.zeros_like(self.input_padded)
+        print(f"[Conv2D Backward] dW shape: {dW.shape}, db shape: {db.shape}, dX_padded shape: {dX_padded.shape}")
+
 
         # Calculate gradients
         for b in range(batch_size):  # Batch dimension
@@ -254,6 +265,7 @@ class conv2D(Layer):
         else:
             dX = dX_padded
 
+        print(f"[Conv2D Backward] Final dX shape: {dX.shape}")
         return dX
 
     def clear_grad(self):
@@ -275,13 +287,17 @@ class ReLU(Layer):
         return self.forward(X)
 
     def forward(self, X):
+        print(f"[ReLU Forward] Input shape: {X.shape}")
         self.input = X
         output = np.where(X < 0, 0, X)
+        print(f"[ReLU Forward] Output shape: {output.shape}")
         return output
 
     def backward(self, grads):
+        print(f"[ReLU Backward] Input gradient shape: {grads.shape}, stored input shape: {self.input.shape}")
         assert self.input.shape == grads.shape
         output = np.where(self.input < 0, 0, grads)
+        print(f"[ReLU Backward] Output gradient shape: {output.shape}")
         return output
 
 

@@ -119,7 +119,7 @@ print("Runner created.")
 runner.train(
     train_set=[train_imgs, train_labs],
     dev_set=[valid_imgs, valid_labs],
-    num_epochs=5,
+    num_epochs=50,
     log_iters=100,  # Log progress every 100 iterations
     save_dir=save_directory
 )
