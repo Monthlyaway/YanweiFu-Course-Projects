@@ -1,6 +1,6 @@
 from .op import *
 import pickle
-
+import logging
 
 class Model_MLP(Layer):
     """
@@ -205,23 +205,23 @@ class Model_CNN(Layer):
             X = X.reshape(X.shape[0], 1, int(
                 np.sqrt(X.shape[1])), int(np.sqrt(X.shape[1])))
 
-        print(f"[CNN Forward] Input shape: {X.shape}")
+        logging.debug(f"[CNN Forward] Input shape: {X.shape}")
         outputs = X
 
         for i, layer in enumerate(self.layers):
             outputs = layer(outputs)
-            print(
+            logging.debug(
                 f"[CNN Forward] After layer {i} ({layer.__class__.__name__}) shape: {outputs.shape}")
 
         return outputs
 
     def backward(self, loss_grad):
-        print(f"[CNN Backward] Input gradient shape: {loss_grad.shape}")
+        logging.debug(f"[CNN Backward] Input gradient shape: {loss_grad.shape}")
         grads = loss_grad
 
         for i, layer in enumerate(reversed(self.layers)):
             grads = layer.backward(grads)
-            print(
+            logging.debug(
                 f"[CNN Backward] After layer {len(self.layers)-i-1} ({layer.__class__.__name__}) gradient shape: {grads.shape}")
 
         return grads
@@ -284,19 +284,19 @@ class Padding(Layer):
         return self.forward(X)
 
     def forward(self, X):
-        print(f"[Padding Forward] Input shape: {X.shape}, pad: {self.pad}")
+        logging.debug(f"[Padding Forward] Input shape: {X.shape}, pad: {self.pad}")
         # 对高度和宽度进行padding，不对batch和channel维度padding
         output = np.pad(X, ((0, 0), (0, 0), (self.pad, self.pad),
                         (self.pad, self.pad)), 'constant', constant_values=0)
-        print(f"[Padding Forward] Output shape: {output.shape}")
+        logging.debug(f"[Padding Forward] Output shape: {output.shape}")
         return output
 
     def backward(self, grads):
-        print(
+        logging.debug(
             f"[Padding Backward] Input gradient shape: {grads.shape}, pad: {self.pad}")
         # 去除padding部分的梯度
         output = grads[:, :, self.pad:-self.pad, self.pad:-self.pad]
-        print(f"[Padding Backward] Output gradient shape: {output.shape}")
+        logging.debug(f"[Padding Backward] Output gradient shape: {output.shape}")
         return output
 
 
@@ -315,7 +315,7 @@ class Pooling(Layer):
         return self.forward(X)
 
     def forward(self, X):
-        print(
+        logging.debug(
             f"[Pooling Forward] Input shape: {X.shape}, pool_size: {self.pool_size}, stride: {self.stride}")
         self.input = X
         batch_size, channels, height, width = X.shape
@@ -351,11 +351,11 @@ class Pooling(Layer):
                             np.argmax(pool_region), pool_region.shape)
                         self.max_indices[b, c, h, w] = max_idx
 
-        print(f"[Pooling Forward] Output shape: {output.shape}")
+        logging.debug(f"[Pooling Forward] Output shape: {output.shape}")
         return output
 
     def backward(self, grads):
-        print(f"[Pooling Backward] Input gradient shape: {grads.shape}")
+        logging.debug(f"[Pooling Backward] Input gradient shape: {grads.shape}")
         batch_size, channels, out_height, out_width = grads.shape
         _, _, in_height, in_width = self.input.shape
 
@@ -378,7 +378,7 @@ class Pooling(Layer):
                         dX[b, c, h_start + max_h, w_start +
                             max_w] += grads[b, c, h, w]
 
-        print(f"[Pooling Backward] Output gradient shape: {dX.shape}")
+        logging.debug(f"[Pooling Backward] Output gradient shape: {dX.shape}")
         return dX
 
 
@@ -394,22 +394,26 @@ class Reshape(Layer):
         return self.forward(X)
 
     def forward(self, X):
-        print(f"[Reshape Forward] Input shape: {X.shape}")
+        logging.debug(f"[Reshape Forward] Input shape: {X.shape}")
         self.input_shape = X.shape
         output = X.reshape(X.shape[0], -1)
-        print(f"[Reshape Forward] Output shape: {output.shape}")
+        logging.debug(f"[Reshape Forward] Output shape: {output.shape}")
         return output
 
     def backward(self, grads):
-        print(f"[Reshape Backward] Input gradient shape: {grads.shape}")
+        logging.debug(f"[Reshape Backward] Input gradient shape: {grads.shape}")
         output = grads.reshape(self.input_shape)
-        print(f"[Reshape Backward] Output gradient shape: {output.shape}")
+        logging.debug(f"[Reshape Backward] Output gradient shape: {output.shape}")
         return output
 
 
 # 测试CNN模型
 if __name__ == "__main__":
     import numpy as np
+    
+    # 设置logging级别为DEBUG
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
     
     # 生成随机数据代替mnist数据集
     # 创建随机的图像数据，形状为[batch_size, height, width]
@@ -428,7 +432,7 @@ if __name__ == "__main__":
     print(f"生成的随机标签形状: {y_sample.shape}")
     
     # 创建CNN模型
-    cnn = Model_CNN(in_channels=1, filter_sizes=[16, 32, 64, 10], act_func='ReLU')
+    cnn = Model_CNN(in_channels=1, filter_sizes=[2, 3, 64, 10], act_func='ReLU')
     
     # 前向传播测试
     print("\n===== 前向传播测试 =====")
