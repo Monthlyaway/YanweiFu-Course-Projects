@@ -1,5 +1,21 @@
 # 神经网络实现报告
 
+## 实验结果
+
+六个MLP的训练结果
+
+![六种MLP的测试](figs/mlp/final_test_accuracy_histogram_calculated.png)
+
+![训练Loss的变化](figs/mlp/validation_loss_comparison.png)
+
+![三种Learning Rate的变化](figs/mlp/theoretical_learning_rate_change.png)
+
+MLP weight Visualization
+
+Layer 2 weights heatmap
+
+![Layer 2 weights heatmap](visualization_results/mlp/MomentGD_StepLR/layer_2_weights_heatmap.png)
+
 ## 线性层实现
 
 线性层是神经网络中的基本构建模块，执行输入的仿射变换。
@@ -240,6 +256,103 @@ def backward(self, grads):
                     dX_padded[b, :, h_start:h_end, w_start:w_end] += self.W[oc] * grads[b, oc, h, w]
 ```
 
+由于CNN使用三层for循环，训练及其缓慢，为证明我的确实现了CNN，以下是调试信息
+
+```bash
+===== 使用随机生成的numpy数组测试CNN模型 =====
+生成的随机数据形状: (32, 28, 28)
+生成的随机标签形状: (32,)
+
+===== 前向传播测试 =====
+[CNN Forward] Input shape: (32, 1, 28, 28)
+[Padding Forward] Input shape: (32, 1, 28, 28), pad: 1
+[Padding Forward] Output shape: (32, 1, 30, 30)
+[CNN Forward] After layer 0 (Padding) shape: (32, 1, 30, 30)
+[Conv2D Forward] Input shape: (32, 1, 30, 30), W shape: (2, 1, 3, 3), b shape: (2, 1, 1)
+[Conv2D Forward] Output shape: (32, 2, 28, 28)
+[CNN Forward] After layer 1 (conv2D) shape: (32, 2, 28, 28)
+[Pooling Forward] Input shape: (32, 2, 28, 28), pool_size: 2, stride: 2
+[Pooling Forward] Output shape: (32, 2, 14, 14)
+[CNN Forward] After layer 2 (Pooling) shape: (32, 2, 14, 14)
+[ReLU Forward] Input shape: (32, 2, 14, 14)
+[ReLU Forward] Output shape: (32, 2, 14, 14)
+[CNN Forward] After layer 3 (ReLU) shape: (32, 2, 14, 14)
+[Padding Forward] Input shape: (32, 2, 14, 14), pad: 1
+[Padding Forward] Output shape: (32, 2, 16, 16)
+[CNN Forward] After layer 4 (Padding) shape: (32, 2, 16, 16)
+[Conv2D Forward] Input shape: (32, 2, 16, 16), W shape: (3, 2, 3, 3), b shape: (3, 1, 1)
+[Conv2D Forward] Output shape: (32, 3, 14, 14)
+[CNN Forward] After layer 5 (conv2D) shape: (32, 3, 14, 14)
+[Pooling Forward] Input shape: (32, 3, 14, 14), pool_size: 2, stride: 2
+[Pooling Forward] Output shape: (32, 3, 7, 7)
+[CNN Forward] After layer 6 (Pooling) shape: (32, 3, 7, 7)
+[ReLU Forward] Input shape: (32, 3, 7, 7)
+[ReLU Forward] Output shape: (32, 3, 7, 7)
+[CNN Forward] After layer 7 (ReLU) shape: (32, 3, 7, 7)
+[Reshape Forward] Input shape: (32, 3, 7, 7)
+[Reshape Forward] Output shape: (32, 147)
+[CNN Forward] After layer 8 (Reshape) shape: (32, 147)
+[Linear Forward] Input shape: (32, 147), W shape: (147, 64), b shape: (1, 64)
+[Linear Forward] Output shape: (32, 64)
+[CNN Forward] After layer 9 (Linear) shape: (32, 64)
+[ReLU Forward] Input shape: (32, 64)
+[ReLU Forward] Output shape: (32, 64)
+[CNN Forward] After layer 10 (ReLU) shape: (32, 64)
+[Linear Forward] Input shape: (32, 64), W shape: (64, 10), b shape: (1, 10)
+[Linear Forward] Output shape: (32, 10)
+[CNN Forward] After layer 11 (Linear) shape: (32, 10)
+
+最终输出形状: (32, 10)
+计算的损失值: 31.30104483921438
+
+===== 反向传播测试 =====
+[CNN Backward] Input gradient shape: (32, 10)
+[Linear Backward] Input gradient shape: (32, 10), stored input shape: (32, 64)
+[Linear Backward] dW shape: (64, 10)
+[Linear Backward] db shape: (1, 10)
+[Linear Backward] dX shape: (32, 64)
+[CNN Backward] After layer 11 (Linear) gradient shape: (32, 64)
+[ReLU Backward] Input gradient shape: (32, 64), stored input shape: (32, 64)
+[ReLU Backward] Output gradient shape: (32, 64)
+[CNN Backward] After layer 10 (ReLU) gradient shape: (32, 64)
+[Linear Backward] Input gradient shape: (32, 64), stored input shape: (32, 147)
+[Linear Backward] dW shape: (147, 64)
+[Linear Backward] db shape: (1, 64)
+[Linear Backward] dX shape: (32, 147)
+[CNN Backward] After layer 9 (Linear) gradient shape: (32, 147)
+[Reshape Backward] Input gradient shape: (32, 147)
+[Reshape Backward] Output gradient shape: (32, 3, 7, 7)
+[CNN Backward] After layer 8 (Reshape) gradient shape: (32, 3, 7, 7)
+[ReLU Backward] Input gradient shape: (32, 3, 7, 7), stored input shape: (32, 3, 7, 7)
+[ReLU Backward] Output gradient shape: (32, 3, 7, 7)
+[CNN Backward] After layer 7 (ReLU) gradient shape: (32, 3, 7, 7)
+[Pooling Backward] Input gradient shape: (32, 3, 7, 7)
+[Pooling Backward] Output gradient shape: (32, 3, 14, 14)
+[CNN Backward] After layer 6 (Pooling) gradient shape: (32, 3, 14, 14)
+[Conv2D Backward] Input gradient shape: (32, 3, 14, 14), stored input shape: (32, 2, 16, 16)
+[Conv2D Backward] dW shape: (3, 2, 3, 3), db shape: (3, 1, 1), dX_padded shape: (32, 2, 16, 16)
+[Conv2D Backward] Final dX shape: (32, 2, 16, 16)
+[CNN Backward] After layer 5 (conv2D) gradient shape: (32, 2, 16, 16)
+[Padding Backward] Input gradient shape: (32, 2, 16, 16), pad: 1
+[Padding Backward] Output gradient shape: (32, 2, 14, 14)
+[CNN Backward] After layer 4 (Padding) gradient shape: (32, 2, 14, 14)
+[ReLU Backward] Input gradient shape: (32, 2, 14, 14), stored input shape: (32, 2, 14, 14)
+[ReLU Backward] Output gradient shape: (32, 2, 14, 14)
+[CNN Backward] After layer 3 (ReLU) gradient shape: (32, 2, 14, 14)
+[Pooling Backward] Input gradient shape: (32, 2, 14, 14)
+[Pooling Backward] Output gradient shape: (32, 2, 28, 28)
+[CNN Backward] After layer 2 (Pooling) gradient shape: (32, 2, 28, 28)
+[Conv2D Backward] Input gradient shape: (32, 2, 28, 28), stored input shape: (32, 1, 30, 30)
+[Conv2D Backward] dW shape: (2, 1, 3, 3), db shape: (2, 1, 1), dX_padded shape: (32, 1, 30, 30)
+[Conv2D Backward] Final dX shape: (32, 1, 30, 30)
+[CNN Backward] After layer 1 (conv2D) gradient shape: (32, 1, 30, 30)
+[Padding Backward] Input gradient shape: (32, 1, 30, 30), pad: 1
+[Padding Backward] Output gradient shape: (32, 1, 28, 28)
+[CNN Backward] After layer 0 (Padding) gradient shape: (32, 1, 28, 28)
+
+CNN模型测试完成！
+```
+
 ## Scheduler  
 
 
@@ -453,11 +566,6 @@ Pooling（池化）是卷积神经网络中另一个关键组件，用于减少�
 
 池化操作通过在特征图上滑动一个固定大小的窗口，并从每个窗口区域提取一个代表性值来减少空间维度。最常用的池化方法是最大池化（Max Pooling），它从每个窗口中选择最大值。
 
-池化操作的主要优势包括：
-
-1. **降维**：减少特征图的空间维度，降低后续层的计算复杂度。
-2. **特征提取**：通过选择最显著的特征（如最大值），增强模型对关键特征的关注。
-3. **位置不变性**：对输入的小位移具有一定的鲁棒性，有助于模型泛化。
 
 ### 前向传播
 
