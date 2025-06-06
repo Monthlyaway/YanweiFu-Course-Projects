@@ -140,7 +140,7 @@ class ResidualCNN(nn.Module):
         self.layer3 = self._make_layer(128, 256, 2, stride=2)
 
         self.avg_pool = nn.AdaptiveAvgPool2d((4, 4))
-        self.fc = nn.Linear(256, 10)
+        self.fc = nn.Linear(256 * 4 * 4, 10)
 
     def _make_layer(self, in_channels, out_channels, num_blocks, stride):
         layers = []
@@ -154,7 +154,7 @@ class ResidualCNN(nn.Module):
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
-        # Put 3 residual blocks in a row 
+        # Put 3 residual blocks in a row
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
