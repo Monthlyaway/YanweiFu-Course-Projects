@@ -6,6 +6,8 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 from torchviz import make_dot
 import os
+import kagglehub
+import torchvision
 
 FIGURE_DIR = "figures"
 MODEL_DIR = "models"
@@ -32,7 +34,6 @@ def plot_images(images, labels, classes):
         plt.axis('off')
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURE_DIR, 'sample_images.png'))
-    
 
 
 def plot_loss_accuracy(train_losses, test_losses, train_accuracies, test_accuracies, model_name):
@@ -61,7 +62,6 @@ def plot_loss_accuracy(train_losses, test_losses, train_accuracies, test_accurac
 
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURE_DIR, f'{model_name}_training_curves.png'))
-    
 
 
 def plot_filters(model):
@@ -103,11 +103,11 @@ def plot_filters(model):
                 axes[i, j].axis('off')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(FIGURE_DIR, f'{model.__class__.__name__}_filters.png'), dpi=600)
-    
+    plt.savefig(os.path.join(
+        FIGURE_DIR, f'{model.__class__.__name__}_filters.png'), dpi=600)
 
 
-def plot_confusion_matrix(y_true, y_pred, classes):
+def plot_confusion_matrix(y_true, y_pred, classes, model_name="model"):
     """
     Plot confusion matrix.
     """
@@ -119,8 +119,7 @@ def plot_confusion_matrix(y_true, y_pred, classes):
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig(os.path.join(FIGURE_DIR, 'confusion_matrix.png'), dpi=600)
-    
+    plt.savefig(os.path.join(FIGURE_DIR, f'confusion_matrix_{model_name}.png'), dpi=600)
 
 
 def visualize_model_architecture(model, input_size=(3, 32, 32)):
@@ -130,7 +129,8 @@ def visualize_model_architecture(model, input_size=(3, 32, 32)):
     x = torch.randn(1, *input_size).requires_grad_(True)
     y = model(x)
     dot = make_dot(y, params=dict(model.named_parameters()))
-    dot.render(os.path.join(FIGURE_DIR, f'{model.__class__.__name__}_architecture'), format='png', dpi=600)
+    dot.render(os.path.join(
+        FIGURE_DIR, f'{model.__class__.__name__}_architecture'), format='png', dpi=600)
 
 
 def compute_flops(model, input_size=(3, 32, 32)):
@@ -243,5 +243,57 @@ def plot_loss_landscape(model, criterion, dataloader, device):
     plt.xlabel('Direction 1')
     plt.ylabel('Direction 2')
     plt.tight_layout()
-    plt.savefig(os.path.join(FIGURE_DIR, 'loss_landscape.png'), dpi=600)
-    
+    plt.savefig(os.path.join(FIGURE_DIR, f'{model.__class__.__name__}_loss_landscape.png'), dpi=600)
+
+
+def get_accuracy(model, dataloader, device):
+    """Compute accuracy of a model on a dataloader."""
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
+            outputs = model(x)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == y).sum().item()
+            total += y.size(0)
+    return 100.0 * correct / total if total > 0 else 0.0
+
+
+def set_random_seeds(seed_value=0, device='cpu'):
+    """Set random seeds for reproducibility."""
+    import random
+    import numpy as np
+    import torch
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    random.seed(seed_value)
+    if device != 'cpu' and torch.cuda.is_available():
+        torch.cuda.manual_seed(seed_value)
+        torch.cuda.manual_seed_all(seed_value)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
+def load_cifar10_data(transform_train, transform_test, batch_size_train=128, batch_size_test=100):
+    # Download latest version
+    path = kagglehub.dataset_download(
+        "harshajakkam/cifar-10-python-cifar-10-python-tar-gz")
+    print("Path to dataset files:", path)
+
+    trainset = torchvision.datasets.CIFAR10(
+        root=path, train=True, download=True, transform=transform_train)
+    # # Take only first 500 samples
+    # trainset = torch.utils.data.Subset(trainset, range(500))
+    trainloader = torch.utils.data.DataLoader(
+        trainset, batch_size=batch_size_train, shuffle=True, num_workers=2)
+
+    testset = torchvision.datasets.CIFAR10(
+        root=path, train=False, download=True, transform=transform_test)
+    # # Take only first 500 samples
+    # testset = torch.utils.data.Subset(testset, range(500))
+    testloader = torch.utils.data.DataLoader(
+        testset, batch_size=batch_size_test, shuffle=False, num_workers=2)
+
+    return trainloader, testloader

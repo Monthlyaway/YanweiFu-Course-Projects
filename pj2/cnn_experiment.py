@@ -1,6 +1,6 @@
 import kagglehub
-from utils import plot_images, plot_loss_accuracy, plot_filters, plot_confusion_matrix, FIGURE_DIR, MODEL_DIR
-from models import BasicCNN, ImprovedCNN, ResidualCNN
+from utils import plot_images, plot_loss_accuracy, plot_filters, plot_confusion_matrix, FIGURE_DIR, MODEL_DIR, load_cifar10_data
+from cnn import BasicCNN, ImprovedCNN, ResidualCNN
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -37,24 +37,8 @@ transform_test = transforms.Compose([
 
 # Load CIFAR-10 dataset
 
-# Download latest version
-path = kagglehub.dataset_download(
-    "harshajakkam/cifar-10-python-cifar-10-python-tar-gz")
-print("Path to dataset files:", path)
 
-trainset = torchvision.datasets.CIFAR10(
-    root=path, train=True, download=True, transform=transform_train)
-# # Take only first 500 samples
-# trainset = torch.utils.data.Subset(trainset, range(500))
-trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=128, shuffle=True, num_workers=2)
-
-testset = torchvision.datasets.CIFAR10(
-    root=path, train=False, download=True, transform=transform_test)
-# # Take only first 500 samples
-# testset = torch.utils.data.Subset(testset, range(500))
-testloader = torch.utils.data.DataLoader(
-    testset, batch_size=100, shuffle=False, num_workers=2)
+trainloader, testloader = load_cifar10_data(transform_train, transform_test)
 
 # Define classes
 classes = ('plane', 'car', 'bird', 'cat', 'deer',
@@ -66,7 +50,7 @@ images, labels = next(dataiter)
 plot_images(images, labels, classes)
 
 
-def train_model(model, criterion, optimizer, num_epochs=25):
+def train_model(model, criterion, optimizer, num_epochs=25, patience=6):
     start_time = time.time()
 
     train_losses = []
@@ -75,6 +59,7 @@ def train_model(model, criterion, optimizer, num_epochs=25):
     test_accuracies = []
 
     best_acc = 0.0
+    epochs_since_improvement = 0
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -175,6 +160,15 @@ def train_model(model, criterion, optimizer, num_epochs=25):
             best_acc = test_accuracy
             torch.save(model.state_dict(),
                        os.path.join(MODEL_DIR, f'best_{model.__class__.__name__}.pth'))
+            epochs_since_improvement = 0
+        else:
+            epochs_since_improvement += 1
+
+        # Early stopping
+        if epochs_since_improvement >= patience:
+            print(
+                f"Early stopping triggered after {epoch+1} epochs. No improvement in test accuracy for {patience} epochs.")
+            break
 
     time_elapsed = time.time() - start_time
     print(
@@ -222,7 +216,7 @@ def test_model(model):
             f'Accuracy of {classes[i]}: {100 * class_correct[i] / class_total[i]:.2f}%')
 
     # Plot confusion matrix
-    plot_confusion_matrix(all_labels, all_preds, classes)
+    plot_confusion_matrix(all_labels, all_preds, classes, model.__class__.__name__)
 
 
 def main():
@@ -267,7 +261,7 @@ def main():
 
         # Train the model
         model, train_losses, test_losses, train_accuracies, test_accuracies, best_acc = train_model(
-            model, criterion, optimizer, num_epochs=100)
+            model, criterion, optimizer, num_epochs=50)
 
         # Save results
         results[name] = {
