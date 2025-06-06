@@ -207,7 +207,8 @@ def plot_loss_landscape(model, criterion, dataloader, device):
     # Define a grid of perturbations
     alpha_range = np.linspace(-1, 1, 20)
     beta_range = np.linspace(-1, 1, 20)
-    loss_landscape = np.zeros((len(alpha_range), len(beta_range)))
+    loss_landscape = np.zeros(
+        (len(beta_range), len(alpha_range)))  # Fixed shape
 
     # Get two random directions
     direction1 = [torch.randn_like(p) for p in original_params]
@@ -216,6 +217,7 @@ def plot_loss_landscape(model, criterion, dataloader, device):
     # Normalize directions
     norm1 = torch.sqrt(sum(torch.sum(d * d) for d in direction1))
     norm2 = torch.sqrt(sum(torch.sum(d * d) for d in direction2))
+
     direction1 = [d / norm1 for d in direction1]
     direction2 = [d / norm2 for d in direction2]
 
@@ -229,7 +231,7 @@ def plot_loss_landscape(model, criterion, dataloader, device):
             # Compute loss
             outputs = model(images)
             loss = criterion(outputs, labels).item()
-            loss_landscape[i, j] = loss
+            loss_landscape[j, i] = loss  # Fixed indexing
 
     # Restore original parameters
     for p, p0 in zip(model.parameters(), original_params):
@@ -243,9 +245,26 @@ def plot_loss_landscape(model, criterion, dataloader, device):
     plt.title('Loss Landscape')
     plt.xlabel('Direction 1')
     plt.ylabel('Direction 2')
+
+    # Add a marker for the original point
+    plt.plot(0, 0, 'r*', markersize=15, label='Current parameters')
+    plt.legend()
+
     plt.tight_layout()
     plt.savefig(os.path.join(
         FIGURE_DIR, f'{model.__class__.__name__}_loss_landscape.png'), dpi=600)
+
+    # Optional: Also create a 3D visualization
+    fig = plt.figure(figsize=(12, 9))
+    ax = fig.add_subplot(111, projection='3d')
+    surf = ax.plot_surface(X, Y, loss_landscape, cmap='viridis', alpha=0.8)
+    ax.set_xlabel('Direction 1')
+    ax.set_ylabel('Direction 2')
+    ax.set_zlabel('Loss')
+    ax.set_title('3D Loss Landscape')
+    fig.colorbar(surf)
+    plt.savefig(os.path.join(
+        FIGURE_DIR, f'{model.__class__.__name__}_loss_landscape_3d.png'), dpi=600)
 
 
 def get_accuracy(model, dataloader, device):
