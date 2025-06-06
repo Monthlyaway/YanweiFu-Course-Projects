@@ -119,7 +119,8 @@ def plot_confusion_matrix(y_true, y_pred, classes, model_name="model"):
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig(os.path.join(FIGURE_DIR, f'confusion_matrix_{model_name}.png'), dpi=600)
+    plt.savefig(os.path.join(
+        FIGURE_DIR, f'confusion_matrix_{model_name}.png'), dpi=600)
 
 
 def visualize_model_architecture(model, input_size=(3, 32, 32)):
@@ -243,7 +244,8 @@ def plot_loss_landscape(model, criterion, dataloader, device):
     plt.xlabel('Direction 1')
     plt.ylabel('Direction 2')
     plt.tight_layout()
-    plt.savefig(os.path.join(FIGURE_DIR, f'{model.__class__.__name__}_loss_landscape.png'), dpi=600)
+    plt.savefig(os.path.join(
+        FIGURE_DIR, f'{model.__class__.__name__}_loss_landscape.png'), dpi=600)
 
 
 def get_accuracy(model, dataloader, device):
@@ -276,7 +278,7 @@ def set_random_seeds(seed_value=0, device='cpu'):
         torch.backends.cudnn.benchmark = False
 
 
-def load_cifar10_data(transform_train, transform_test, batch_size_train=128, batch_size_test=100):
+def load_cifar10_data(transform_train, transform_test, batch_size_train=128, batch_size_test=100, subset_size=None):
     # Download latest version
     path = kagglehub.dataset_download(
         "harshajakkam/cifar-10-python-cifar-10-python-tar-gz")
@@ -284,16 +286,16 @@ def load_cifar10_data(transform_train, transform_test, batch_size_train=128, bat
 
     trainset = torchvision.datasets.CIFAR10(
         root=path, train=True, download=True, transform=transform_train)
-    # # Take only first 500 samples
-    # trainset = torch.utils.data.Subset(trainset, range(500))
+    if subset_size is not None:
+        trainset = torch.utils.data.Subset(trainset, range(subset_size))
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size_train, shuffle=True, num_workers=2)
+        trainset, batch_size=batch_size_train, shuffle=True, num_workers=4)
 
     testset = torchvision.datasets.CIFAR10(
         root=path, train=False, download=True, transform=transform_test)
-    # # Take only first 500 samples
-    # testset = torch.utils.data.Subset(testset, range(500))
+    if subset_size is not None:
+        testset = torch.utils.data.Subset(testset, range(subset_size))
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=batch_size_test, shuffle=False, num_workers=2)
+        testset, batch_size=batch_size_test, shuffle=False, num_workers=4)
 
     return trainloader, testloader

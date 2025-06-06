@@ -222,8 +222,8 @@ def test_model(model):
 def main():
     # Try different models
     models = {
-        # "BasicCNN": BasicCNN(),
-        # "ImprovedCNN": ImprovedCNN(),
+        "BasicCNN": BasicCNN(),
+        "ImprovedCNN": ImprovedCNN(),
         "ResidualCNN": ResidualCNN()
     }
 
