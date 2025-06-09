@@ -172,7 +172,7 @@ def main():
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.001)
         model, train_losses, test_losses, train_accuracies, test_accuracies, best_acc = train_model(
-            model, criterion, optimizer, num_epochs=50)
+            model, criterion, optimizer, num_epochs=60)
         results[name] = {
             "model": model,
             "train_accuracies": train_accuracies,
