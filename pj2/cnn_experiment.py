@@ -289,7 +289,7 @@ def main():
     plt.ylabel("Accuracy (%)")
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(FIGURE_DIR, "model_comparison.png"))
+    plt.savefig(os.path.join(FIGURE_DIR, "cnn_model_comparison.png"))
 
 
 if __name__ == "__main__":

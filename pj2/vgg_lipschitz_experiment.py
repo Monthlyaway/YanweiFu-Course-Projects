@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 import numpy as np
 import os
 from vgg import VGG_A, VGG_A_BatchNorm
-from utils import load_cifar10_data, FIGURE_DIR
+from utils import load_cifar10_data, FIGURE_DIR, MODEL_DIR
 import matplotlib.pyplot as plt
 
 # Set device
@@ -30,6 +30,7 @@ transform_test = transforms.Compose([
 # Load CIFAR-10 data (use testloader for evaluation)
 _, testloader = load_cifar10_data(transform_train, transform_test)
 
+
 def compute_lipschitz_curve(model, criterion, dataloader, device, lr_list, steps=1):
     model.eval()
     dataiter = iter(dataloader)
@@ -39,8 +40,20 @@ def compute_lipschitz_curve(model, criterion, dataloader, device, lr_list, steps
     outputs = model(images)
     loss = criterion(outputs, labels)
     grads = torch.autograd.grad(loss, model.parameters(), create_graph=True)
+    print(f"Type of grads: {type(grads)}")
+    print(f"Length of grads: {len(grads)}")
+    print(f"Type of grads[0]: {type(grads[0])}")
+    print(f"Shape of grads[0]: {grads[0].shape}")
+    print(f"Type of grads[0].detach(): {type(grads[0].detach())}")
+    print(f"Shape of grads[0].detach(): {grads[0].detach().shape}")
+    print(
+        f"Type of grads[0].detach().view(-1): {type(grads[0].detach().view(-1))}")
+    print(
+        f"Shape of grads[0].detach().view(-1): {grads[0].detach().view(-1).shape}")
     # Flatten gradients
     grad_vector = torch.cat([g.detach().view(-1) for g in grads])
+    # 权重flatten之后变为 (6,), (3,), (2,) cat on dim 0
+    # 维度是 (11,)
     grad_norm = torch.norm(grad_vector)
     grad_unit = grad_vector / (grad_norm + 1e-12)
     # Store original parameters
@@ -63,6 +76,7 @@ def compute_lipschitz_curve(model, criterion, dataloader, device, lr_list, steps
             p.data = orig.data.clone()
     return loss_curves
 
+
 def main():
     criterion = nn.CrossEntropyLoss()
     lr_list = [1e-3, 2e-3, 1e-4, 5e-4]
@@ -75,13 +89,15 @@ def main():
         print(f"\nComputing Lipschitz curve for {name}")
         model = model.to(device)
         # Optionally load pretrained weights if available
-        model_path = os.path.join('models', f'best_{name}.pth')
+        model_path = os.path.join(MODEL_DIR, f'best_{name}.pth')
         if os.path.exists(model_path):
             model.load_state_dict(torch.load(model_path, map_location=device))
             print(f"Loaded weights from {model_path}")
         else:
-            print(f"No pretrained weights found for {name}, using random init.")
-        loss_curve = compute_lipschitz_curve(model, criterion, testloader, device, lr_list)
+            print(
+                f"No pretrained weights found for {name}, using random init.")
+        loss_curve = compute_lipschitz_curve(
+            model, criterion, testloader, device, lr_list)
         results[name] = loss_curve
     # For each learning rate, get max/min across models
     max_curve = np.maximum(results['VGG_A'], results['VGG_A_BatchNorm'])
@@ -89,8 +105,10 @@ def main():
     # Plot
     plt.figure(figsize=(8, 6))
     plt.plot(lr_list, results['VGG_A'], 'o-', label='VGG_A (no BN)')
-    plt.plot(lr_list, results['VGG_A_BatchNorm'], 's-', label='VGG_A_BatchNorm')
-    plt.fill_between(lr_list, min_curve, max_curve, color='gray', alpha=0.3, label='Gap (max-min)')
+    plt.plot(lr_list, results['VGG_A_BatchNorm'],
+             's-', label='VGG_A_BatchNorm')
+    plt.fill_between(lr_list, min_curve, max_curve,
+                     color='gray', alpha=0.3, label='Gap (max-min)')
     plt.xscale('log')
     plt.xlabel('Learning Rate (step size)')
     plt.ylabel('Loss after step in -grad direction')
@@ -99,7 +117,9 @@ def main():
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURE_DIR, 'vgg_loss_lipschitz_comparison.png'))
-    print(f"Saved plot to {os.path.join(FIGURE_DIR, 'vgg_loss_lipschitz_comparison.png')}")
+    print(
+        f"Saved plot to {os.path.join(FIGURE_DIR, 'vgg_loss_lipschitz_comparison.png')}")
+
 
 if __name__ == "__main__":
-    main() 
+    main()
