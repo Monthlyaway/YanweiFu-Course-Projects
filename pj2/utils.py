@@ -308,13 +308,13 @@ def load_cifar10_data(transform_train, transform_test, batch_size_train=128, bat
     if subset_size is not None:
         trainset = torch.utils.data.Subset(trainset, range(subset_size))
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size_train, shuffle=True, num_workers=4)
+        trainset, batch_size=batch_size_train, shuffle=True, num_workers=8)
 
     testset = torchvision.datasets.CIFAR10(
         root=path, train=False, download=True, transform=transform_test)
     if subset_size is not None:
         testset = torch.utils.data.Subset(testset, range(subset_size))
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=batch_size_test, shuffle=False, num_workers=4)
+        testset, batch_size=batch_size_test, shuffle=False, num_workers=8)
 
     return trainloader, testloader
