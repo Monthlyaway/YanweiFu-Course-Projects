@@ -2,6 +2,8 @@
 
 [Github链接](https://github.com/Monthlyaway/YanweiFu-Course-Projects/tree/main/pj2)
 
+[Google Drive 全部模型和代码](https://drive.google.com/drive/folders/1n1_XjPbGacpE2vvVkP8O7Pa8oIhFam3k?usp=drive_link)
+
 ## CNN 实验
 
 ### 网络架构设计
